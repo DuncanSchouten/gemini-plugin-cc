@@ -43,7 +43,7 @@ export function getGeminiAvailability(cwd, options = {}) {
  * @returns {{ loggedIn: boolean, detail: string }}
  */
 export function getGeminiAuthStatus(options = {}) {
-  const configDir = options.configDir ?? path.join(os.homedir(), ".gemini");
+  const configDir = options.configDir ?? process.env.GEMINI_CONFIG_HOME ?? path.join(os.homedir(), ".gemini");
   const settingsPath = path.join(configDir, "settings.json");
 
   try {
