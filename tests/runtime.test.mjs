@@ -1257,3 +1257,30 @@ test("stop hook logs running tasks without blocking when the review gate is disa
   assert.match(blocked.stderr, /\/gemini:status/i);
   assert.match(blocked.stderr, /\/gemini:cancel task-live/i);
 });
+
+test("stop hook allows immediately when the review gate is enabled but no assistant message was produced", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeGemini(binDir);
+  const configDir = path.join(binDir, ".gemini");
+  installFakeGeminiConfig(configDir, { selectedType: "oauth-personal" });
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const setup = run("node", [SCRIPT, "setup", "--enable-review-gate", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+  assert.equal(setup.status, 0, setup.stderr);
+
+  const allowed = run("node", [STOP_HOOK], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir }),
+    input: JSON.stringify({ cwd: repo, session_id: "sess-no-edits" })
+  });
+
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(allowed.stdout.trim(), "");
+});

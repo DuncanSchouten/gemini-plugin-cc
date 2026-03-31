@@ -168,6 +168,13 @@ function main() {
     return;
   }
 
+  // Skip review if the previous turn did not produce code changes (US-008)
+  const lastMessage = String(input.last_assistant_message ?? "").trim();
+  if (!lastMessage) {
+    logNote(runningTaskNote);
+    return;
+  }
+
   const review = runStopReview(cwd, input);
   if (!review.ok) {
     emitDecision({

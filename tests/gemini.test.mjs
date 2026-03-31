@@ -156,6 +156,20 @@ test("runGeminiProcess captures tool_use events", async () => {
   assert.ok(toolNames.length > 0, "Should have captured at least one tool_use progress event");
 });
 
+test("runGeminiProcess kills subprocess after timeoutMs", async () => {
+  const tmp = makeTempDir();
+  installFakeGemini(tmp, "slow-task");
+
+  const result = await runGeminiProcess(tmp, {
+    prompt: "do something slow",
+    timeoutMs: 100,
+    env: buildEnv(tmp)
+  });
+
+  assert.ok(result.error, "Should have an error after timeout");
+  assert.match(result.error.message, /timed out/i);
+});
+
 test("runGeminiProcess returns error on non-zero exit", async () => {
   const tmp = makeTempDir();
   installFakeGemini(tmp, "auth-error");
@@ -301,6 +315,20 @@ test("runGeminiTurn passes resumeSessionId through to runGeminiProcess", async (
 // ---------------------------------------------------------------------------
 // parseStructuredOutput (reused from codex.mjs, tool-agnostic)
 // ---------------------------------------------------------------------------
+
+test("parseStructuredOutput strips markdown code fences from JSON", () => {
+  const raw = '```json\n{"verdict": "approve", "summary": "ok", "findings": [], "next_steps": []}\n```';
+  const result = parseStructuredOutput(raw);
+  assert.equal(result.parsed.verdict, "approve");
+  assert.equal(result.parseError, null);
+});
+
+test("parseStructuredOutput strips bare code fences without json tag", () => {
+  const raw = '```\n{"verdict": "needs-attention"}\n```';
+  const result = parseStructuredOutput(raw);
+  assert.equal(result.parsed.verdict, "needs-attention");
+  assert.equal(result.parseError, null);
+});
 
 test("parseStructuredOutput parses valid JSON", () => {
   const raw = JSON.stringify({ verdict: "approve", summary: "ok", findings: [], next_steps: [] });

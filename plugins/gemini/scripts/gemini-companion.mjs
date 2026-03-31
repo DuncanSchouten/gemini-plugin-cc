@@ -216,24 +216,29 @@ function handleSetup(argv) {
   outputResult(options.json ? finalReport : renderSetupReport(finalReport), options.json);
 }
 
+function loadReviewSchema() {
+  return JSON.stringify(readOutputSchema(REVIEW_SCHEMA), null, 2);
+}
+
 function buildAdversarialReviewPrompt(context, focusText) {
   const template = loadPromptTemplate(ROOT_DIR, "adversarial-review");
+  const schema = loadReviewSchema();
   return interpolateTemplate(template, {
     REVIEW_KIND: "Adversarial Review",
     TARGET_LABEL: context.target.label,
     USER_FOCUS: focusText || "No extra focus provided.",
     REVIEW_INPUT: context.content
-  });
+  }) + `\n\n<output_schema>\nReturn ONLY valid JSON (no markdown fences) matching this schema:\n${schema}\n</output_schema>`;
 }
 
 function buildReviewPrompt(context, focusText) {
-  const template = loadPromptTemplate(ROOT_DIR, "adversarial-review");
+  const template = loadPromptTemplate(ROOT_DIR, "review");
+  const schema = loadReviewSchema();
   return interpolateTemplate(template, {
-    REVIEW_KIND: "Review",
     TARGET_LABEL: context.target.label,
     USER_FOCUS: focusText || "No extra focus provided.",
     REVIEW_INPUT: context.content
-  });
+  }) + `\n\n<output_schema>\nReturn ONLY valid JSON (no markdown fences) matching this schema:\n${schema}\n</output_schema>`;
 }
 
 function ensureGeminiReady(cwd) {

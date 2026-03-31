@@ -137,6 +137,7 @@ function describeToolUse(event) {
  * @param {boolean} [options.sandbox] - Enable --sandbox
  * @param {string} [options.approvalMode] - auto_edit | yolo
  * @param {string} [options.resumeSessionId] - Resume a previous session by ID
+ * @param {number} [options.timeoutMs] - Kill subprocess after this many ms (default: none)
  * @param {ProgressReporter} [options.onProgress]
  * @param {Record<string, string>} [options.env]
  * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], sessionId: string | null, error: Error | null }>}
@@ -263,7 +264,20 @@ export function runGeminiProcess(cwd, options = {}) {
       // Stream parsing errors are non-fatal
     });
 
+    // Subprocess timeout (NFR-001)
+    let timedOut = false;
+    let timeoutTimer = null;
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        emitProgress(options.onProgress, `Gemini subprocess timed out after ${Math.round(options.timeoutMs / 1000)}s.`, "failed");
+        try { child.kill("SIGTERM"); } catch { /* ignore */ }
+      }, options.timeoutMs);
+      timeoutTimer.unref?.();
+    }
+
     child.on("error", (err) => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
       resolve({
         status: 1,
         finalMessage,
@@ -276,6 +290,7 @@ export function runGeminiProcess(cwd, options = {}) {
     });
 
     child.on("close", (code) => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
       resolve({
         status: code ?? 1,
         finalMessage,
@@ -283,7 +298,9 @@ export function runGeminiProcess(cwd, options = {}) {
         reasoningSummary,
         touchedFiles,
         sessionId,
-        error: code !== 0 ? new Error(`gemini exited with code ${code}`) : null
+        error: timedOut
+          ? new Error(`gemini subprocess timed out after ${Math.round(options.timeoutMs / 1000)}s`)
+          : code !== 0 ? new Error(`gemini exited with code ${code}`) : null
       });
     });
   });
@@ -304,6 +321,9 @@ export function runGeminiProcess(cwd, options = {}) {
  * @param {Record<string, string>} [options.env]
  * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], error: Error | null }>}
  */
+const REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
+const TASK_TIMEOUT_MS = 30 * 60 * 1000;
+
 export async function runGeminiReview(cwd, options = {}) {
   emitProgress(options.onProgress, "Starting Gemini review.", "starting");
 
@@ -312,6 +332,7 @@ export async function runGeminiReview(cwd, options = {}) {
     model: options.model,
     sandbox: true,
     approvalMode: "yolo",
+    timeoutMs: options.timeoutMs ?? REVIEW_TIMEOUT_MS,
     onProgress: options.onProgress,
     env: options.env
   });
@@ -345,6 +366,7 @@ export async function runGeminiTurn(cwd, options = {}) {
     sandbox: !writable,
     approvalMode: writable ? "auto_edit" : "yolo",
     resumeSessionId: options.resumeSessionId,
+    timeoutMs: options.timeoutMs ?? TASK_TIMEOUT_MS,
     onProgress: options.onProgress,
     env: options.env
   });
@@ -353,6 +375,16 @@ export async function runGeminiTurn(cwd, options = {}) {
 // ---------------------------------------------------------------------------
 // Structured output parsing (reused from codex.mjs — tool-agnostic)
 // ---------------------------------------------------------------------------
+
+/**
+ * Strip markdown code fences from a string.
+ * Gemini often wraps JSON output in ```json ... ``` blocks.
+ */
+function stripMarkdownFences(text) {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/);
+  return match ? match[1].trim() : trimmed;
+}
 
 export function parseStructuredOutput(rawOutput, fallback = {}) {
   if (!rawOutput) {
@@ -364,21 +396,27 @@ export function parseStructuredOutput(rawOutput, fallback = {}) {
     };
   }
 
-  try {
-    return {
-      parsed: JSON.parse(rawOutput),
-      parseError: null,
-      rawOutput,
-      ...fallback
-    };
-  } catch (error) {
-    return {
-      parsed: null,
-      parseError: error.message,
-      rawOutput,
-      ...fallback
-    };
+  // Try raw first, then try stripping markdown fences
+  const candidates = [rawOutput, stripMarkdownFences(rawOutput)];
+  for (const candidate of candidates) {
+    try {
+      return {
+        parsed: JSON.parse(candidate),
+        parseError: null,
+        rawOutput,
+        ...fallback
+      };
+    } catch {
+      // Try next candidate
+    }
   }
+
+  return {
+    parsed: null,
+    parseError: `Could not parse JSON from Gemini output (tried raw and fence-stripped).`,
+    rawOutput,
+    ...fallback
+  };
 }
 
 export function readOutputSchema(schemaPath) {
