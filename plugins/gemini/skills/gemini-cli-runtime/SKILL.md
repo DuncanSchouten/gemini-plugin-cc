@@ -22,6 +22,12 @@ Execution rules:
 - Map `flash` to `--model gemini-3-flash-preview`.
 - Default to a write-capable Gemini run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 
+Timing expectations:
+- Simple prompts (explanation, diagnosis) typically take 10-30 seconds.
+- Code reviews of real diffs typically take 30-60+ seconds.
+- Multi-step tasks with tool execution (file edits, shell commands) can take several minutes.
+- For anything beyond a clearly small, bounded request, prefer background execution so the user can continue working in Claude Code.
+
 Command selection:
 - Use exactly one `task` invocation per rescue handoff.
 - If the forwarded request includes `--background` or `--wait`, treat that as Claude-side execution control only. Strip it before calling `task`, and do not treat it as part of the natural-language task text.
