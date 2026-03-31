@@ -1,82 +1,61 @@
-# Codex plugin for Claude Code
+# Gemini plugin for Claude Code
 
-Use Codex from inside Claude Code for code reviews or to delegate tasks to Codex.
+Use Gemini from inside Claude Code for code reviews or to delegate tasks to Gemini.
 
-This plugin is for Claude Code users who want an easy way to start using Codex from the workflow
+This plugin is for Claude Code users who want an easy way to start using Gemini from the workflow
 they already have.
-
-<video src="./docs/plugin-demo.webm" controls muted playsinline autoplay></video>
 
 ## What You Get
 
-- `/codex:review` for a normal read-only Codex review
-- `/codex:adversarial-review` for a steerable challenge review
-- `/codex:rescue`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
+- `/gemini:review` for a balanced read-only Gemini review
+- `/gemini:adversarial-review` for a steerable challenge review
+- `/gemini:rescue`, `/gemini:status`, `/gemini:result`, and `/gemini:cancel` to delegate work and manage background jobs
 
 ## Requirements
 
-- **ChatGPT subscription (incl. Free) or OpenAI API key.**
-  - Usage will contribute to your Codex usage limits. [Learn more](https://developers.openai.com/codex/pricing).
+- **Google account with Gemini CLI access**
 - **Node.js 18.18 or later**
 
 ## Install
 
-Add the marketplace in Claude Code:
+Run:
 
 ```bash
-/plugin marketplace add openai/codex-plugin-cc
+/gemini:setup
 ```
 
-Install the plugin:
+`/gemini:setup` will tell you whether the Gemini CLI is ready. If Gemini is missing and npm is available, it can offer to install the Gemini CLI for you.
+
+If you prefer to install the Gemini CLI yourself, use:
 
 ```bash
-/plugin install codex@openai-codex
+npm install -g @google/gemini-cli
 ```
 
-Reload plugins:
+If the Gemini CLI is installed but not authenticated yet, run:
 
 ```bash
-/reload-plugins
-```
-
-Then run:
-
-```bash
-/codex:setup
-```
-
-`/codex:setup` will tell you whether Codex is ready. If Codex is missing and npm is available, it can offer to install Codex for you.
-
-If you prefer to install Codex yourself, use:
-
-```bash
-npm install -g @openai/codex
-```
-
-If Codex is installed but not logged in yet, run:
-
-```bash
-!codex login
+!gemini auth login
 ```
 
 After install, you should see:
 
 - the slash commands listed below
-- the `codex:codex-rescue` subagent in `/agents`
+- the `gemini:gemini-rescue` subagent in `/agents`
 
 One simple first run is:
 
 ```bash
-/codex:review --background
-/codex:status
-/codex:result
+/gemini:review --background
+/gemini:status
+/gemini:result
 ```
 
 ## Usage
 
-### `/codex:review`
+### `/gemini:review`
 
-Runs a normal Codex review on your current work. It gives you the same quality of code review as running `/review` inside Codex directly.
+Runs a balanced Gemini review on your current work.
 
 > [!NOTE]
 > Code review especially for multi-file changes might take a while. It's generally recommended to run it in the background.
@@ -86,26 +65,26 @@ Use it when you want:
 - a review of your current uncommitted changes
 - a review of your branch compared to a base branch like `main`
 
-Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. It is not steerable and does not take custom focus text. Use [`/codex:adversarial-review`](#codexadversarial-review) when you want to challenge a specific decision or risk area.
+Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. Use [`/gemini:adversarial-review`](#geminiadversarial-review) when you want to challenge a specific decision or risk area.
 
 Examples:
 
 ```bash
-/codex:review
-/codex:review --base main
-/codex:review --background
+/gemini:review
+/gemini:review --base main
+/gemini:review --background
 ```
 
-This command is read-only and will not perform any changes. When run in the background you can use [`/codex:status`](#codexstatus) to check on the progress and [`/codex:cancel`](#codexcancel) to cancel the ongoing task.
+This command is read-only and will not perform any changes. When run in the background you can use [`/gemini:status`](#geministatus) to check on the progress and [`/gemini:cancel`](#geminicancel) to cancel the ongoing task.
 
-### `/codex:adversarial-review`
+### `/gemini:adversarial-review`
 
 Runs a **steerable** review that questions the chosen implementation and design.
 
 It can be used to pressure-test assumptions, tradeoffs, failure modes, and whether a different approach would have been safer or simpler.
 
-It uses the same review target selection as `/codex:review`, including `--base <ref>` for branch review.
-It also supports `--wait` and `--background`. Unlike `/codex:review`, it can take extra focus text after the flags.
+It uses the same review target selection as `/gemini:review`, including `--base <ref>` for branch review.
+It also supports `--wait` and `--background`. Unlike `/gemini:review`, it can take extra focus text after the flags.
 
 Use it when you want:
 
@@ -116,61 +95,61 @@ Use it when you want:
 Examples:
 
 ```bash
-/codex:adversarial-review
-/codex:adversarial-review --base main challenge whether this was the right caching and retry design
-/codex:adversarial-review --background look for race conditions and question the chosen approach
+/gemini:adversarial-review
+/gemini:adversarial-review --base main challenge whether this was the right caching and retry design
+/gemini:adversarial-review --background look for race conditions and question the chosen approach
 ```
 
 This command is read-only. It does not fix code.
 
-### `/codex:rescue`
+### `/gemini:rescue`
 
-Hands a task to Codex through the `codex:codex-rescue` subagent.
+Hands a task to Gemini through the `gemini:gemini-rescue` subagent.
 
-Use it when you want Codex to:
+Use it when you want Gemini to:
 
 - investigate a bug
 - try a fix
-- continue a previous Codex task
+- continue a previous Gemini session
 - take a faster or cheaper pass with a smaller model
 
 > [!NOTE]
 > Depending on the task and the model you choose these tasks might take a long time and it's generally recommended to force the task to be in the background or move the agent to the background.
 
-It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest rescue thread for this repo.
+It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest rescue session for this repo.
 
 Examples:
 
 ```bash
-/codex:rescue investigate why the tests started failing
-/codex:rescue fix the failing test with the smallest safe patch
-/codex:rescue --resume apply the top fix from the last run
-/codex:rescue --model gpt-5.4-mini --effort medium investigate the flaky integration test
-/codex:rescue --model spark fix the issue quickly
-/codex:rescue --background investigate the regression
+/gemini:rescue investigate why the tests started failing
+/gemini:rescue fix the failing test with the smallest safe patch
+/gemini:rescue --resume apply the top fix from the last run
+/gemini:rescue --model pro investigate the flaky integration test
+/gemini:rescue --model flash fix the issue quickly
+/gemini:rescue --background investigate the regression
 ```
 
-You can also just ask for a task to be delegated to Codex:
+You can also just ask for a task to be delegated to Gemini:
 
 ```text
-Ask Codex to redesign the database connection to be more resilient.
+Ask Gemini to redesign the database connection to be more resilient.
 ```
 
 **Notes:**
 
-- if you do not pass `--model` or `--effort`, Codex chooses its own defaults.
-- if you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`
-- follow-up rescue requests can continue the latest Codex task in the repo
+- if you do not pass `--model`, Gemini CLI uses its default model routing
+- model aliases: `flash` maps to `gemini-3-flash-preview`, `pro` maps to `gemini-3-pro-preview`, `pro-latest` maps to `gemini-3.1-pro-preview`
+- follow-up rescue requests can continue the latest Gemini session in the repo
 
-### `/codex:status`
+### `/gemini:status`
 
-Shows running and recent Codex jobs for the current repository.
+Shows running and recent Gemini jobs for the current repository.
 
 Examples:
 
 ```bash
-/codex:status
-/codex:status task-abc123
+/gemini:status
+/gemini:status task-abc123
 ```
 
 Use it to:
@@ -179,127 +158,113 @@ Use it to:
 - see the latest completed job
 - confirm whether a task is still running
 
-### `/codex:result`
+### `/gemini:result`
 
-Shows the final stored Codex output for a finished job.
-When available, it also includes the Codex session ID so you can reopen that run directly in Codex with `codex resume <session-id>`.
-
-Examples:
-
-```bash
-/codex:result
-/codex:result task-abc123
-```
-
-### `/codex:cancel`
-
-Cancels an active background Codex job.
+Shows the final stored Gemini output for a finished job.
 
 Examples:
 
 ```bash
-/codex:cancel
-/codex:cancel task-abc123
+/gemini:result
+/gemini:result task-abc123
 ```
 
-### `/codex:setup`
+### `/gemini:cancel`
 
-Checks whether Codex is installed and authenticated.
-If Codex is missing and npm is available, it can offer to install Codex for you.
+Cancels an active background Gemini job.
 
-You can also use `/codex:setup` to manage the optional review gate.
+Examples:
+
+```bash
+/gemini:cancel
+/gemini:cancel task-abc123
+```
+
+### `/gemini:setup`
+
+Checks whether the Gemini CLI is installed and authenticated.
+If the Gemini CLI is missing and npm is available, it can offer to install it for you.
+
+You can also use `/gemini:setup` to manage the optional review gate.
 
 #### Enabling review gate
 
 ```bash
-/codex:setup --enable-review-gate
-/codex:setup --disable-review-gate
+/gemini:setup --enable-review-gate
+/gemini:setup --disable-review-gate
 ```
 
-When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted Codex review based on Claude's response. If that review finds issues, the stop is blocked so Claude can address them first.
+When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted Gemini review based on Claude's response. If that review finds issues, the stop is blocked so Claude can address them first.
 
 > [!WARNING]
-> The review gate can create a long-running Claude/Codex loop and may drain usage limits quickly. Only enable it when you plan to actively monitor the session.
+> The review gate can create a long-running Claude/Gemini loop and may drain usage limits quickly. Only enable it when you plan to actively monitor the session.
 
 ## Typical Flows
 
 ### Review Before Shipping
 
 ```bash
-/codex:review
+/gemini:review
 ```
 
-### Hand A Problem To Codex
+### Hand A Problem To Gemini
 
 ```bash
-/codex:rescue investigate why the build is failing in CI
+/gemini:rescue investigate why the build is failing in CI
 ```
 
 ### Start Something Long-Running
 
 ```bash
-/codex:adversarial-review --background
-/codex:rescue --background investigate the flaky test
+/gemini:adversarial-review --background
+/gemini:rescue --background investigate the flaky test
 ```
 
 Then check in with:
 
 ```bash
-/codex:status
-/codex:result
+/gemini:status
+/gemini:result
 ```
 
-## Codex Integration
+## Gemini Integration
 
-The Codex plugin wraps the [Codex app server](https://developers.openai.com/codex/app-server). It uses the global `codex` binary installed in your environment and [applies the same configuration](https://developers.openai.com/codex/config-basic).
+The Gemini plugin spawns the [Gemini CLI](https://github.com/google-gemini/gemini-cli) as a subprocess with `--output-format stream-json` for structured NDJSON output. It uses the global `gemini` binary installed in your environment and inherits your existing authentication from `~/.gemini/settings.json`.
 
-### Common Configurations
+### Authentication
 
-If you want to change the default reasoning effort or the default model that gets used by the plugin, you can define that inside your user-level or project-level `config.toml`. For example to always use `gpt-5.4-mini` on `high` for a specific project you can add the following to a `.codex/config.toml` file at the root of the directory you started Claude in:
+The plugin uses your existing Gemini CLI authentication (OAuth via Google account). Run `gemini auth login` if you haven't authenticated yet.
 
-```toml
-model = "gpt-5.4-mini"
-model_reasoning_effort = "xhigh"
-```
+### Model Selection
 
-Your configuration will be picked up based on:
+You can specify a model with `--model`:
 
-- user-level config in `~/.codex/config.toml`
-- project-level overrides in `.codex/config.toml`
-- project-level overrides only load when the [project is trusted](https://developers.openai.com/codex/config-advanced#project-config-files-codexconfigtoml)
+- `flash` — maps to `gemini-3-flash-preview` (fast, lightweight)
+- `pro` — maps to `gemini-3-pro-preview` (capable, thinking-enabled)
+- `pro-latest` — maps to `gemini-3.1-pro-preview` (latest pro with multimodal tool use)
+- Or pass any model name directly (e.g., `--model gemini-2.5-pro`)
 
-Check out the Codex docs for more [configuration options](https://developers.openai.com/codex/config-reference).
+If you omit `--model`, the Gemini CLI uses its default model routing.
 
-### Moving The Work Over To Codex
+### Session Resume
 
-Delegated tasks and any [stop gate](#what-does-the-review-gate-do) run can also be directly resumed inside Codex by running `codex resume` either with the specific session ID you received from running `/codex:result` or `/codex:status` or by selecting it from the list.
-
-This way you can review the Codex work or continue the work there.
+Gemini CLI automatically saves conversation sessions. When you run `/gemini:rescue`, the plugin captures the session ID and stores it with the job record. You can resume a previous session with `--resume` to continue where you left off with full conversation context.
 
 ## FAQ
 
-### Do I need a separate Codex account for this plugin?
+### Do I need a separate Gemini account for this plugin?
 
-If you are already signed into Codex on this machine, that account should work immediately here too. This plugin uses your local Codex CLI authentication.
+If you are already signed into the Gemini CLI on this machine, that account should work immediately. This plugin uses your local Gemini CLI authentication.
 
-If you only use Claude Code today and have not used Codex yet, you will also need to sign in to Codex with either a ChatGPT account or an API key. [Codex is available with your ChatGPT subscription](https://developers.openai.com/codex/pricing/), and [`codex login`](https://developers.openai.com/codex/cli/reference/#codex-login) supports both ChatGPT and API key sign-in. Run `/codex:setup` to check whether Codex is ready, and use `!codex login` if it is not.
+If you only use Claude Code today and have not used the Gemini CLI yet, you will need to authenticate with your Google account. Run `/gemini:setup` to check whether Gemini is ready, and use `!gemini auth login` if it is not.
 
-### Does the plugin use a separate Codex runtime?
+### Does the plugin use a separate Gemini runtime?
 
-No. This plugin delegates through your local [Codex CLI](https://developers.openai.com/codex/cli/) and [Codex app server](https://developers.openai.com/codex/app-server/) on the same machine.
+No. This plugin spawns the [Gemini CLI](https://github.com/google-gemini/gemini-cli) directly as a subprocess on the same machine.
 
 That means:
 
-- it uses the same Codex install you would use directly
+- it uses the same Gemini CLI install you would use directly
 - it uses the same local authentication state
 - it uses the same repository checkout and machine-local environment
-
-### Will it use the same Codex config I already have?
-
-Yes. If you already use Codex, the plugin picks up the same [configuration](#common-configurations).
-
-### Can I keep using my current API key or base URL setup?
-
-Yes. Because the plugin uses your local Codex CLI, your existing sign-in method and config still apply.
-
-If you need to point the built-in OpenAI provider at a different endpoint, set `openai_base_url` in your [Codex config](https://developers.openai.com/codex/config-advanced/#config-and-state-locations).
+- each command spawns a fresh process (no persistent background server)
