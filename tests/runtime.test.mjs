@@ -283,7 +283,7 @@ test("review accepts --background while still running as a tracked review job", 
   });
 
   assert.equal(status.status, 0, status.stderr);
-  assert.match(status.stdout, /# Codex Status/);
+  assert.match(status.stdout, /# Gemini Status/);
   assert.match(status.stdout, /Gemini Review/);
   assert.match(status.stdout, /completed/);
 });
@@ -369,21 +369,17 @@ test("status shows phases, hints, and the latest finished job", () => {
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Active jobs:/);
-  assert.match(result.stdout, /\| Job \| Kind \| Status \| Phase \| Elapsed \| Codex Session ID \| Summary \| Actions \|/);
-  assert.match(result.stdout, /\| review-live \| review \| running \| reviewing \| .* \| thr_1 \| Review working tree diff \|/);
-  assert.match(result.stdout, /`\/codex:status review-live`<br>`\/codex:cancel review-live`/);
+  assert.match(result.stdout, /\| Job \| Kind \| Status \| Phase \| Elapsed \| Summary \| Actions \|/);
+  assert.match(result.stdout, /\| review-live \| review \| running \| reviewing \| .* \| Review working tree diff \|/);
+  assert.match(result.stdout, /`\/gemini:status review-live`<br>`\/gemini:cancel review-live`/);
   assert.match(result.stdout, /Live details:/);
   assert.match(result.stdout, /Latest finished:/);
   assert.match(result.stdout, /Progress:/);
   assert.match(result.stdout, /Session runtime: subprocess startup/);
   assert.match(result.stdout, /Phase: reviewing/);
-  assert.match(result.stdout, /Codex session ID: thr_1/);
-  assert.match(result.stdout, /Resume in Codex: codex resume thr_1/);
   assert.match(result.stdout, /Thread ready \(thr_1\)\./);
   assert.match(result.stdout, /Reviewer started: current changes/);
   assert.match(result.stdout, /Duration: 1m 5s/);
-  assert.match(result.stdout, /Codex session ID: thr_done/);
-  assert.match(result.stdout, /Resume in Codex: codex resume thr_done/);
 });
 
 test("status without a job id only shows jobs from the current Claude session", () => {
@@ -446,7 +442,7 @@ test("status without a job id only shows jobs from the current Claude session", 
     cwd: workspace,
     env: {
       ...process.env,
-      CODEX_COMPANION_SESSION_ID: "sess-current"
+      GEMINI_COMPANION_SESSION_ID: "sess-current"
     }
   });
 
@@ -514,8 +510,6 @@ test("status preserves adversarial review kind labels", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /\| review-adv-live \| adversarial-review \| running \| reviewing \|/);
   assert.match(result.stdout, /- review-adv \| completed \| adversarial-review \| Gemini Adversarial Review/);
-  assert.match(result.stdout, /Codex session ID: thr_adv_live/);
-  assert.match(result.stdout, /Codex session ID: thr_adv_done/);
 });
 
 test("status --wait times out cleanly when a job is still active", () => {
@@ -636,8 +630,6 @@ test("result returns the stored output for the latest finished job by default", 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Reviewed uncommitted changes/);
   assert.match(result.stdout, /No material issues found/);
-  assert.match(result.stdout, /Codex session ID: thr_review_finished/);
-  assert.match(result.stdout, /Resume in Codex: codex resume thr_review_finished/);
 });
 
 test("result without a job id prefers the latest finished job from the current Claude session", () => {
@@ -727,14 +719,12 @@ test("result without a job id prefers the latest finished job from the current C
     cwd: workspace,
     env: {
       ...process.env,
-      CODEX_COMPANION_SESSION_ID: "sess-current"
+      GEMINI_COMPANION_SESSION_ID: "sess-current"
     }
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Current session output/);
-  assert.match(result.stdout, /Codex session ID: thr_current/);
-  assert.match(result.stdout, /Resume in Codex: codex resume thr_current/);
 });
 
 test("result for a finished write-capable task returns the raw Gemini final response", () => {

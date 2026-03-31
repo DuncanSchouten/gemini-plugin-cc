@@ -121,7 +121,7 @@ function inferLegacyJobPhase(job, progressPreview = []) {
 
   for (let index = progressPreview.length - 1; index >= 0; index -= 1) {
     const line = progressPreview[index].toLowerCase();
-    if (line.startsWith("starting codex") || line.startsWith("thread ready") || line.startsWith("turn started")) {
+    if (line.startsWith("starting gemini") || line.startsWith("thread ready") || line.startsWith("turn started")) {
       return "starting";
     }
     if (line.startsWith("reviewer started") || line.includes("review mode")) {
@@ -149,7 +149,7 @@ function inferLegacyJobPhase(job, progressPreview = []) {
     if (line.startsWith("turn completed")) {
       return "finalizing";
     }
-    if (line.startsWith("codex error:") || line.startsWith("failed:")) {
+    if (line.startsWith("gemini error:") || line.startsWith("failed:")) {
       return "failed";
     }
   }
@@ -206,7 +206,7 @@ function matchJobReference(jobs, reference, predicate = () => true) {
     throw new Error(`Job reference "${reference}" is ambiguous. Use a longer job id.`);
   }
 
-  throw new Error(`No job found for "${reference}". Run /codex:status to list known jobs.`);
+  throw new Error(`No job found for "${reference}". Run /gemini:status to list known jobs.`);
 }
 
 export function buildStatusSnapshot(cwd, options = {}) {
@@ -243,7 +243,7 @@ export function buildSingleJobSnapshot(cwd, reference, options = {}) {
   const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
   const selected = matchJobReference(jobs, reference);
   if (!selected) {
-    throw new Error(`No job found for "${reference}". Run /codex:status to inspect known jobs.`);
+    throw new Error(`No job found for "${reference}". Run /gemini:status to inspect known jobs.`);
   }
 
   return {
@@ -267,14 +267,14 @@ export function resolveResultJob(cwd, reference) {
 
   const active = matchJobReference(jobs, reference, (job) => job.status === "queued" || job.status === "running");
   if (active) {
-    throw new Error(`Job ${active.id} is still ${active.status}. Check /codex:status and try again once it finishes.`);
+    throw new Error(`Job ${active.id} is still ${active.status}. Check /gemini:status and try again once it finishes.`);
   }
 
   if (reference) {
-    throw new Error(`No finished job found for "${reference}". Run /codex:status to inspect active jobs.`);
+    throw new Error(`No finished job found for "${reference}". Run /gemini:status to inspect active jobs.`);
   }
 
-  throw new Error("No finished Codex jobs found for this repository yet.");
+  throw new Error("No finished Gemini jobs found for this repository yet.");
 }
 
 export function resolveCancelableJob(cwd, reference) {
@@ -294,8 +294,8 @@ export function resolveCancelableJob(cwd, reference) {
     return { workspaceRoot, job: activeJobs[0] };
   }
   if (activeJobs.length > 1) {
-    throw new Error("Multiple Codex jobs are active. Pass a job id to /codex:cancel.");
+    throw new Error("Multiple Gemini jobs are active. Pass a job id to /gemini:cancel.");
   }
 
-  throw new Error("No active Codex jobs to cancel.");
+  throw new Error("No active Gemini jobs to cancel.");
 }

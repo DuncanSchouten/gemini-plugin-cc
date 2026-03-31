@@ -99,24 +99,17 @@ function escapeMarkdownCell(value) {
     .trim();
 }
 
-function formatCodexResumeCommand(job) {
-  if (!job?.threadId) {
-    return null;
-  }
-  return `codex resume ${job.threadId}`;
-}
-
 function appendActiveJobsTable(lines, jobs) {
   lines.push("Active jobs:");
-  lines.push("| Job | Kind | Status | Phase | Elapsed | Codex Session ID | Summary | Actions |");
-  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
+  lines.push("| Job | Kind | Status | Phase | Elapsed | Summary | Actions |");
+  lines.push("| --- | --- | --- | --- | --- | --- | --- |");
   for (const job of jobs) {
-    const actions = [`/codex:status ${job.id}`];
+    const actions = [`/gemini:status ${job.id}`];
     if (job.status === "queued" || job.status === "running") {
-      actions.push(`/codex:cancel ${job.id}`);
+      actions.push(`/gemini:cancel ${job.id}`);
     }
     lines.push(
-      `| ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.kindLabel)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(job.phase ?? "")} | ${escapeMarkdownCell(job.elapsed ?? "")} | ${escapeMarkdownCell(job.threadId ?? "")} | ${escapeMarkdownCell(job.summary ?? "")} | ${actions.map((action) => `\`${action}\``).join("<br>")} |`
+      `| ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.kindLabel)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(job.phase ?? "")} | ${escapeMarkdownCell(job.elapsed ?? "")} | ${escapeMarkdownCell(job.summary ?? "")} | ${actions.map((action) => `\`${action}\``).join("<br>")} |`
     );
   }
 }
@@ -135,25 +128,18 @@ function pushJobDetails(lines, job, options = {}) {
   if (options.showDuration && job.duration) {
     lines.push(`  Duration: ${job.duration}`);
   }
-  if (job.threadId) {
-    lines.push(`  Codex session ID: ${job.threadId}`);
-  }
-  const resumeCommand = formatCodexResumeCommand(job);
-  if (resumeCommand) {
-    lines.push(`  Resume in Codex: ${resumeCommand}`);
-  }
   if (job.logFile && options.showLog) {
     lines.push(`  Log: ${job.logFile}`);
   }
   if ((job.status === "queued" || job.status === "running") && options.showCancelHint) {
-    lines.push(`  Cancel: /codex:cancel ${job.id}`);
+    lines.push(`  Cancel: /gemini:cancel ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && options.showResultHint) {
-    lines.push(`  Result: /codex:result ${job.id}`);
+    lines.push(`  Result: /gemini:result ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && job.jobClass === "task" && job.write && options.showReviewHint) {
-    lines.push("  Review changes: /codex:review --wait");
-    lines.push("  Stricter review: /codex:adversarial-review --wait");
+    lines.push("  Review changes: /gemini:review --wait");
+    lines.push("  Stricter review: /gemini:adversarial-review --wait");
   }
   if (job.progressPreview?.length) {
     lines.push("  Progress:");
@@ -176,14 +162,14 @@ function appendReasoningSection(lines, reasoningSummary) {
 
 export function renderSetupReport(report) {
   const lines = [
-    "# Codex Setup",
+    "# Gemini Setup",
     "",
     `Status: ${report.ready ? "ready" : "needs attention"}`,
     "",
     "Checks:",
     `- node: ${report.node.detail}`,
     `- npm: ${report.npm.detail}`,
-    `- codex: ${report.codex.detail}`,
+    `- gemini: ${report.codex.detail}`,
     `- auth: ${report.auth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,
@@ -211,9 +197,9 @@ export function renderSetupReport(report) {
 export function renderReviewResult(parsedResult, meta) {
   if (!parsedResult.parsed) {
     const lines = [
-      `# Codex ${meta.reviewLabel}`,
+      `# Gemini ${meta.reviewLabel}`,
       "",
-      "Codex did not return valid structured JSON.",
+      "Gemini did not return valid structured JSON.",
       "",
       `- Parse error: ${parsedResult.parseError}`
     ];
@@ -230,10 +216,10 @@ export function renderReviewResult(parsedResult, meta) {
   const validationError = validateReviewResultShape(parsedResult.parsed);
   if (validationError) {
     const lines = [
-      `# Codex ${meta.reviewLabel}`,
+      `# Gemini ${meta.reviewLabel}`,
       "",
       `Target: ${meta.targetLabel}`,
-      "Codex returned JSON with an unexpected review shape.",
+      "Gemini returned JSON with an unexpected review shape.",
       "",
       `- Validation error: ${validationError}`
     ];
@@ -250,7 +236,7 @@ export function renderReviewResult(parsedResult, meta) {
   const data = normalizeReviewResultData(parsedResult.parsed);
   const findings = [...data.findings].sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
   const lines = [
-    `# Codex ${meta.reviewLabel}`,
+    `# Gemini ${meta.reviewLabel}`,
     "",
     `Target: ${meta.targetLabel}`,
     `Verdict: ${data.verdict}`,
@@ -289,7 +275,7 @@ export function renderNativeReviewResult(result, meta) {
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
   const lines = [
-    `# Codex ${meta.reviewLabel}`,
+    `# Gemini ${meta.reviewLabel}`,
     "",
     `Target: ${meta.targetLabel}`,
     ""
@@ -298,9 +284,9 @@ export function renderNativeReviewResult(result, meta) {
   if (stdout) {
     lines.push(stdout);
   } else if (result.status === 0) {
-    lines.push("Codex review completed without any stdout output.");
+    lines.push("Gemini review completed without any stdout output.");
   } else {
-    lines.push("Codex review failed.");
+    lines.push("Gemini review failed.");
   }
 
   if (stderr) {
@@ -318,13 +304,13 @@ export function renderTaskResult(parsedResult, meta) {
     return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
   }
 
-  const message = String(parsedResult?.failureMessage ?? "").trim() || "Codex did not return a final message.";
+  const message = String(parsedResult?.failureMessage ?? "").trim() || "Gemini did not return a final message.";
   return `${message}\n`;
 }
 
 export function renderStatusReport(report) {
   const lines = [
-    "# Codex Status",
+    "# Gemini Status",
     "",
     `Session runtime: ${report.sessionRuntime.label}`,
     `Review gate: ${report.config.stopReviewGate ? "enabled" : "disabled"}`,
@@ -368,14 +354,14 @@ export function renderStatusReport(report) {
 
   if (report.needsReview) {
     lines.push("The stop-time review gate is enabled.");
-    lines.push("Ending the session will trigger a fresh Codex adversarial review and block if it finds issues.");
+    lines.push("Ending the session will trigger a fresh Gemini adversarial review and block if it finds issues.");
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
 export function renderJobStatusReport(job) {
-  const lines = ["# Codex Job Status", ""];
+  const lines = ["# Gemini Job Status", ""];
   pushJobDetails(lines, job, {
     showElapsed: job.status === "queued" || job.status === "running",
     showDuration: job.status !== "queued" && job.status !== "running",
@@ -388,14 +374,8 @@ export function renderJobStatusReport(job) {
 }
 
 export function renderStoredJobResult(job, storedJob) {
-  const threadId = storedJob?.threadId ?? job.threadId ?? null;
-  const resumeCommand = threadId ? `codex resume ${threadId}` : null;
   if (isStructuredReviewStoredResult(storedJob) && storedJob?.rendered) {
-    const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
-    if (!threadId) {
-      return output;
-    }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
   }
 
   const rawOutput =
@@ -403,32 +383,19 @@ export function renderStoredJobResult(job, storedJob) {
     (typeof storedJob?.result?.codex?.stdout === "string" && storedJob.result.codex.stdout) ||
     "";
   if (rawOutput) {
-    const output = rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
-    if (!threadId) {
-      return output;
-    }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
   }
 
   if (storedJob?.rendered) {
-    const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
-    if (!threadId) {
-      return output;
-    }
-    return `${output}\nCodex session ID: ${threadId}\nResume in Codex: ${resumeCommand}\n`;
+    return storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
   }
 
   const lines = [
-    `# ${job.title ?? "Codex Result"}`,
+    `# ${job.title ?? "Gemini Result"}`,
     "",
     `Job: ${job.id}`,
     `Status: ${job.status}`
   ];
-
-  if (threadId) {
-    lines.push(`Codex session ID: ${threadId}`);
-    lines.push(`Resume in Codex: ${resumeCommand}`);
-  }
 
   if (job.summary) {
     lines.push(`Summary: ${job.summary}`);
@@ -447,7 +414,7 @@ export function renderStoredJobResult(job, storedJob) {
 
 export function renderCancelReport(job) {
   const lines = [
-    "# Codex Cancel",
+    "# Gemini Cancel",
     "",
     `Cancelled ${job.id}.`,
     ""
@@ -459,7 +426,7 @@ export function renderCancelReport(job) {
   if (job.summary) {
     lines.push(`- Summary: ${job.summary}`);
   }
-  lines.push("- Check `/codex:status` for the updated queue.");
+  lines.push("- Check `/gemini:status` for the updated queue.");
 
   return `${lines.join("\n").trimEnd()}\n`;
 }
