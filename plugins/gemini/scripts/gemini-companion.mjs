@@ -342,20 +342,34 @@ async function executeTaskRun(request) {
   ensureGeminiReady(request.cwd);
 
   const taskMetadata = buildTaskRunMetadata({
-    prompt: request.prompt
+    prompt: request.prompt,
+    resumeSessionId: request.resumeSessionId
   });
 
-  if (!request.prompt) {
-    throw new Error("Provide a prompt, a prompt file, or piped stdin.");
+  let resumeSessionId = null;
+  if (request.resumeSessionId) {
+    resumeSessionId = request.resumeSessionId;
+  } else if (request.resumeLast) {
+    const candidate = findLatestTaskSession(workspaceRoot, { excludeJobId: request.jobId });
+    if (!candidate) {
+      throw new Error("No previous Gemini task session was found for this repository.");
+    }
+    resumeSessionId = candidate.sessionId;
+  }
+
+  if (!request.prompt && !resumeSessionId) {
+    throw new Error("Provide a prompt, a prompt file, piped stdin, or use --resume-last.");
   }
 
   const result = await runGeminiTurn(workspaceRoot, {
-    prompt: request.prompt,
+    prompt: request.prompt || DEFAULT_CONTINUE_PROMPT,
     writable: request.write,
     model: request.model,
+    resumeSessionId,
     onProgress: request.onProgress
   });
 
+  const geminiSessionId = result.sessionId ?? null;
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";
   const failureMessage = result.error?.message ?? result.stderr ?? "";
   const rendered = renderTaskResult(
@@ -372,7 +386,7 @@ async function executeTaskRun(request) {
   );
   const payload = {
     status: result.status,
-    threadId: null,
+    geminiSessionId,
     rawOutput,
     touchedFiles: result.touchedFiles,
     reasoningSummary: result.reasoningSummary
@@ -380,7 +394,7 @@ async function executeTaskRun(request) {
 
   return {
     exitStatus: result.status,
-    threadId: null,
+    threadId: geminiSessionId,
     turnId: null,
     payload,
     rendered,
@@ -391,6 +405,21 @@ async function executeTaskRun(request) {
   };
 }
 
+function findLatestTaskSession(workspaceRoot, options = {}) {
+  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot)).filter((job) => job.id !== options.excludeJobId);
+  const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
+  if (activeTask) {
+    throw new Error(`Task ${activeTask.id} is still running. Use /gemini:status before continuing it.`);
+  }
+
+  const trackedTask = jobs.find((job) => job.jobClass === "task" && job.status === "completed" && job.threadId);
+  if (trackedTask) {
+    return { sessionId: trackedTask.threadId };
+  }
+
+  return null;
+}
+
 function buildReviewJobMetadata(reviewName, target) {
   return {
     kind: reviewName === "Adversarial Review" ? "adversarial-review" : "review",
@@ -399,17 +428,20 @@ function buildReviewJobMetadata(reviewName, target) {
   };
 }
 
-function buildTaskRunMetadata({ prompt }) {
-  if (String(prompt ?? "").includes(STOP_REVIEW_TASK_MARKER)) {
+function buildTaskRunMetadata({ prompt, resumeSessionId = null, resumeLast = false }) {
+  if (!resumeSessionId && !resumeLast && String(prompt ?? "").includes(STOP_REVIEW_TASK_MARKER)) {
     return {
       title: "Gemini Stop Gate Review",
       summary: "Stop-gate review of previous Claude turn"
     };
   }
 
+  const isResume = Boolean(resumeSessionId || resumeLast);
+  const title = isResume ? "Gemini Resume" : "Gemini Task";
+  const fallbackSummary = isResume ? DEFAULT_CONTINUE_PROMPT : "Task";
   return {
-    title: "Gemini Task",
-    summary: shorten(prompt || "Task")
+    title,
+    summary: shorten(prompt || fallbackSummary)
   };
 }
 
@@ -461,12 +493,14 @@ function buildTaskJob(workspaceRoot, taskMetadata, write) {
   });
 }
 
-function buildTaskRequest({ cwd, model, prompt, write, jobId }) {
+function buildTaskRequest({ cwd, model, prompt, write, resumeLast, resumeSessionId, jobId }) {
   return {
     cwd,
     model,
     prompt,
     write,
+    resumeLast,
+    resumeSessionId,
     jobId
   };
 }
@@ -480,9 +514,9 @@ function readTaskPrompt(cwd, options, positionals) {
   return positionalPrompt || readStdinIfPiped();
 }
 
-function requireTaskRequest(prompt) {
-  if (!prompt) {
-    throw new Error("Provide a prompt, a prompt file, or piped stdin.");
+function requireTaskRequest(prompt, resumeLast) {
+  if (!prompt && !resumeLast) {
+    throw new Error("Provide a prompt, a prompt file, piped stdin, or use --resume-last.");
   }
 }
 
@@ -591,7 +625,7 @@ async function handleReview(argv) {
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["model", "cwd", "prompt-file"],
-    booleanOptions: ["json", "write", "background"],
+    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
     }
@@ -602,14 +636,20 @@ async function handleTask(argv) {
   const model = normalizeRequestedModel(options.model);
   const prompt = readTaskPrompt(cwd, options, positionals);
 
+  const resumeLast = Boolean(options["resume-last"] || options.resume);
+  const fresh = Boolean(options.fresh);
+  if (resumeLast && fresh) {
+    throw new Error("Choose either --resume/--resume-last or --fresh.");
+  }
   const write = Boolean(options.write);
   const taskMetadata = buildTaskRunMetadata({
-    prompt
+    prompt,
+    resumeLast
   });
 
   if (options.background) {
     ensureGeminiReady(cwd);
-    requireTaskRequest(prompt);
+    requireTaskRequest(prompt, resumeLast);
 
     const job = buildTaskJob(workspaceRoot, taskMetadata, write);
     const request = buildTaskRequest({
@@ -617,6 +657,7 @@ async function handleTask(argv) {
       model,
       prompt,
       write,
+      resumeLast,
       jobId: job.id
     });
     const { payload } = enqueueBackgroundTask(cwd, job, request);
@@ -633,6 +674,7 @@ async function handleTask(argv) {
         model,
         prompt,
         write,
+        resumeLast,
         jobId: job.id,
         onProgress: progress
       }),
@@ -710,6 +752,49 @@ async function handleStatus(argv) {
 
   const report = buildStatusSnapshot(cwd, { all: options.all });
   outputResult(renderStatusPayload(report, options.json), options.json);
+}
+
+function handleTaskResumeCandidate(argv) {
+  const { options } = parseCommandInput(argv, {
+    valueOptions: ["cwd"],
+    booleanOptions: ["json"]
+  });
+
+  const cwd = resolveCommandCwd(options);
+  const workspaceRoot = resolveCommandWorkspace(options);
+  const sessionId = process.env[SESSION_ID_ENV] ?? null;
+  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
+  const candidate =
+    jobs.find(
+      (job) =>
+        job.jobClass === "task" &&
+        job.threadId &&
+        job.status !== "queued" &&
+        job.status !== "running" &&
+        (!sessionId || job.sessionId === sessionId)
+    ) ?? null;
+
+  const payload = {
+    available: Boolean(candidate),
+    sessionId,
+    candidate:
+      candidate == null
+        ? null
+        : {
+            id: candidate.id,
+            status: candidate.status,
+            title: candidate.title ?? null,
+            summary: candidate.summary ?? null,
+            sessionId: candidate.threadId,
+            completedAt: candidate.completedAt ?? null,
+            updatedAt: candidate.updatedAt ?? null
+          }
+  };
+
+  const rendered = candidate
+    ? `Resumable task found: ${candidate.id} (${candidate.status}).\n`
+    : "No resumable task found for this session.\n";
+  outputCommandResult(payload, rendered, options.json);
 }
 
 function handleResult(argv) {
@@ -807,6 +892,9 @@ async function main() {
       break;
     case "result":
       handleResult(argv);
+      break;
+    case "task-resume-candidate":
+      handleTaskResumeCandidate(argv);
       break;
     case "cancel":
       await handleCancel(argv);

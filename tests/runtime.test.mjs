@@ -202,6 +202,99 @@ test("write task output focuses on the Gemini result without generic follow-up h
   assert.equal(result.stdout, "Handled the requested task.\nTask prompt accepted.\n");
 });
 
+test("task --resume-last resumes the latest persisted task session", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeGemini(binDir);
+  const configDir = path.join(binDir, ".gemini");
+  installFakeGeminiConfig(configDir, { selectedType: "oauth-personal" });
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const firstRun = run("node", [SCRIPT, "task", "initial task"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+  assert.equal(firstRun.status, 0, firstRun.stderr);
+
+  const result = run("node", [SCRIPT, "task", "--resume-last", "follow up"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes("Resumed the prior session"), `Expected resume output, got: ${result.stdout}`);
+});
+
+test("task-resume-candidate returns the latest rescue session from the current session", () => {
+  const workspace = makeTempDir();
+  const stateDir = resolveStateDir(workspace);
+  const jobsDir = path.join(stateDir, "jobs");
+  fs.mkdirSync(jobsDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(stateDir, "state.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        config: { stopReviewGate: false },
+        jobs: [
+          {
+            id: "task-current",
+            status: "completed",
+            title: "Gemini Task",
+            jobClass: "task",
+            sessionId: "sess-current",
+            threadId: "fake-session-abc123",
+            summary: "Investigate the flaky test",
+            updatedAt: "2026-03-24T20:00:00.000Z"
+          },
+          {
+            id: "task-other-session",
+            status: "completed",
+            title: "Gemini Task",
+            jobClass: "task",
+            sessionId: "sess-other",
+            threadId: "fake-session-other",
+            summary: "Old rescue run",
+            updatedAt: "2026-03-24T20:05:00.000Z"
+          },
+          {
+            id: "review-current",
+            status: "completed",
+            title: "Gemini Review",
+            jobClass: "review",
+            sessionId: "sess-current",
+            threadId: "fake-session-review",
+            summary: "Review main...HEAD",
+            updatedAt: "2026-03-24T20:10:00.000Z"
+          }
+        ]
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  const result = run("node", [SCRIPT, "task-resume-candidate", "--json"], {
+    cwd: workspace,
+    env: {
+      ...process.env,
+      GEMINI_COMPANION_SESSION_ID: "sess-current"
+    }
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.available, true);
+  assert.equal(payload.sessionId, "sess-current");
+  assert.equal(payload.candidate.id, "task-current");
+  assert.equal(payload.candidate.sessionId, "fake-session-abc123");
+});
+
 test("task --background enqueues a detached worker and exposes per-job status", async () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();

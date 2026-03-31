@@ -134,14 +134,18 @@ function describeToolUse(event) {
  * @param {string} [options.model] - Model name (e.g., gemini-3-pro-preview)
  * @param {boolean} [options.sandbox] - Enable --sandbox
  * @param {string} [options.approvalMode] - auto_edit | yolo
+ * @param {string} [options.resumeSessionId] - Resume a previous session by ID
  * @param {ProgressReporter} [options.onProgress]
  * @param {Record<string, string>} [options.env]
- * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], error: Error | null }>}
+ * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], sessionId: string | null, error: Error | null }>}
  */
 export function runGeminiProcess(cwd, options = {}) {
   return new Promise((resolve, reject) => {
     const args = ["-p", options.prompt, "--output-format", "stream-json"];
 
+    if (options.resumeSessionId) {
+      args.push("--resume", options.resumeSessionId);
+    }
     if (options.sandbox) {
       args.push("--sandbox");
     }
@@ -160,6 +164,7 @@ export function runGeminiProcess(cwd, options = {}) {
 
     let finalMessage = "";
     let stderr = "";
+    let sessionId = null;
     const reasoningSummary = [];
     const touchedFiles = [];
 
@@ -198,7 +203,17 @@ export function runGeminiProcess(cwd, options = {}) {
           break;
 
         case "result":
+          if (event.session_id) {
+            sessionId = event.session_id;
+          }
           emitProgress(options.onProgress, "Gemini completed.", "finalizing");
+          break;
+
+        case "session":
+        case "session_start":
+          if (event.session_id) {
+            sessionId = event.session_id;
+          }
           break;
 
         case "error":
@@ -220,6 +235,7 @@ export function runGeminiProcess(cwd, options = {}) {
         stderr: stderr.trim(),
         reasoningSummary,
         touchedFiles,
+        sessionId,
         error: err
       });
     });
@@ -231,6 +247,7 @@ export function runGeminiProcess(cwd, options = {}) {
         stderr: stderr.trim(),
         reasoningSummary,
         touchedFiles,
+        sessionId,
         error: code !== 0 ? new Error(`gemini exited with code ${code}`) : null
       });
     });
@@ -273,21 +290,26 @@ export async function runGeminiReview(cwd, options = {}) {
  * @param {string} options.prompt
  * @param {boolean} [options.writable=true] - Whether the task can write files
  * @param {string} [options.model]
- * @param {string} [options.sandbox]
+ * @param {string} [options.resumeSessionId] - Resume a previous Gemini session
  * @param {ProgressReporter} [options.onProgress]
  * @param {Record<string, string>} [options.env]
- * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], error: Error | null }>}
+ * @returns {Promise<{ status: number, finalMessage: string, stderr: string, reasoningSummary: string[], touchedFiles: string[], sessionId: string | null, error: Error | null }>}
  */
 export async function runGeminiTurn(cwd, options = {}) {
   const writable = options.writable ?? true;
 
-  emitProgress(options.onProgress, "Starting Gemini task.", "starting");
+  if (options.resumeSessionId) {
+    emitProgress(options.onProgress, `Resuming Gemini session ${options.resumeSessionId}.`, "starting");
+  } else {
+    emitProgress(options.onProgress, "Starting Gemini task.", "starting");
+  }
 
   return runGeminiProcess(cwd, {
     prompt: options.prompt,
     model: options.model,
     sandbox: !writable,
     approvalMode: writable ? "auto_edit" : "yolo",
+    resumeSessionId: options.resumeSessionId,
     onProgress: options.onProgress,
     env: options.env
   });

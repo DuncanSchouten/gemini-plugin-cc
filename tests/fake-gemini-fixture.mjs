@@ -46,6 +46,10 @@ if (promptIndex >= 0 && args[promptIndex + 1]) {
 const outputFormatIndex = args.indexOf("--output-format");
 const outputFormat = outputFormatIndex >= 0 ? args[outputFormatIndex + 1] : "text";
 
+// Determine resume session
+const resumeIndex = args.indexOf("--resume");
+const resumeSessionId = resumeIndex >= 0 ? args[resumeIndex + 1] : null;
+
 // Determine model
 const modelIndex = args.indexOf("-m");
 const model = modelIndex >= 0 ? args[modelIndex + 1] : "auto";
@@ -158,12 +162,18 @@ async function main() {
     } else if (isReviewPrompt()) {
       const payload = structuredReviewPayload();
       send({ type: "message", content: payload });
-      send({ type: "result", status: "completed" });
+      send({ type: "result", status: "completed", session_id: "fake-session-review-001" });
     } else {
       // Task mode
+      const fakeSessionId = resumeSessionId || "fake-session-" + Date.now();
+      send({ type: "session_start", session_id: fakeSessionId });
       send({ type: "tool_use", name: "edit_file", input: { path: "src/fix.js", content: "fixed" } });
-      send({ type: "message", content: "Handled the requested task.\\nTask prompt accepted." });
-      send({ type: "result", status: "completed" });
+      if (resumeSessionId) {
+        send({ type: "message", content: "Resumed the prior session.\\nFollow-up prompt accepted." });
+      } else {
+        send({ type: "message", content: "Handled the requested task.\\nTask prompt accepted." });
+      }
+      send({ type: "result", status: "completed", session_id: fakeSessionId });
     }
   } else if (outputFormat === "json") {
     if (isReviewPrompt()) {

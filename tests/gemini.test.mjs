@@ -250,6 +250,55 @@ test("runGeminiTurn passes model flag when specified", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Session resume support
+// ---------------------------------------------------------------------------
+
+test("runGeminiProcess captures session_id from result event", async () => {
+  const tmp = makeTempDir();
+  installFakeGemini(tmp, "task-ok");
+
+  const result = await runGeminiProcess(tmp, {
+    prompt: "fix the bug",
+    env: buildEnv(tmp)
+  });
+
+  assert.equal(result.status, 0);
+  assert.ok(result.sessionId, "Should capture a session ID from the stream");
+  assert.match(result.sessionId, /^fake-session-/);
+});
+
+test("runGeminiProcess passes --resume flag when resumeSessionId is provided", async () => {
+  const tmp = makeTempDir();
+  installFakeGemini(tmp, "task-ok");
+
+  const result = await runGeminiProcess(tmp, {
+    prompt: "follow up on the fix",
+    resumeSessionId: "fake-session-previous",
+    env: buildEnv(tmp)
+  });
+
+  assert.equal(result.status, 0);
+  assert.ok(result.finalMessage.includes("Resumed the prior session"));
+  assert.equal(result.sessionId, "fake-session-previous");
+});
+
+test("runGeminiTurn passes resumeSessionId through to runGeminiProcess", async () => {
+  const tmp = makeTempDir();
+  installFakeGemini(tmp, "task-ok");
+
+  const result = await runGeminiTurn(tmp, {
+    prompt: "continue the investigation",
+    resumeSessionId: "fake-session-abc123",
+    writable: true,
+    env: buildEnv(tmp)
+  });
+
+  assert.equal(result.status, 0);
+  assert.ok(result.finalMessage.includes("Resumed the prior session"));
+  assert.equal(result.sessionId, "fake-session-abc123");
+});
+
+// ---------------------------------------------------------------------------
 // parseStructuredOutput (reused from codex.mjs, tool-agnostic)
 // ---------------------------------------------------------------------------
 
