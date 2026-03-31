@@ -169,7 +169,7 @@ export function renderSetupReport(report) {
     "Checks:",
     `- node: ${report.node.detail}`,
     `- npm: ${report.npm.detail}`,
-    `- gemini: ${report.codex.detail}`,
+    `- gemini: ${report.gemini.detail}`,
     `- auth: ${report.auth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,
@@ -380,7 +380,7 @@ export function renderStoredJobResult(job, storedJob) {
 
   const rawOutput =
     (typeof storedJob?.result?.rawOutput === "string" && storedJob.result.rawOutput) ||
-    (typeof storedJob?.result?.codex?.stdout === "string" && storedJob.result.codex.stdout) ||
+    (typeof storedJob?.result?.gemini?.stdout === "string" && storedJob.result.gemini.stdout) ||
     "";
   if (rawOutput) {
     return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;

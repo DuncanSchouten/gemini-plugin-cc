@@ -407,7 +407,7 @@ test("status shows phases, hints, and the latest finished job", () => {
         id: "review-done",
         status: "completed",
         title: "Gemini Review",
-        rendered: "# Codex Review\n\nReviewed uncommitted changes.\nNo material issues found.\n"
+        rendered: "# Gemini Review\n\nReviewed uncommitted changes.\nNo material issues found.\n"
       },
       null,
       2
@@ -678,7 +678,7 @@ test("result returns the stored output for the latest finished job by default", 
         id: "review-finished",
         status: "completed",
         title: "Gemini Review",
-        rendered: "# Codex Review\n\nReviewed uncommitted changes.\nNo material issues found.\n",
+        rendered: "# Gemini Review\n\nReviewed uncommitted changes.\nNo material issues found.\n",
         result: {
           result: { verdict: "approve", summary: "No material issues found.", findings: [], next_steps: [] },
           parseError: null
@@ -740,7 +740,7 @@ test("result without a job id prefers the latest finished job from the current C
         title: "Gemini Review",
         threadId: "thr_current",
         result: {
-          codex: {
+          gemini: {
             stdout: "Current session output."
           }
         }
@@ -760,7 +760,7 @@ test("result without a job id prefers the latest finished job from the current C
         title: "Gemini Review",
         threadId: "thr_other",
         result: {
-          codex: {
+          gemini: {
             stdout: "Old session output."
           }
         }

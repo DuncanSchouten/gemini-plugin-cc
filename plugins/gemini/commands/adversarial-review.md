@@ -1,11 +1,11 @@
 ---
-description: Run a Codex review that challenges the implementation approach and design choices
+description: Run a Gemini review that challenges the implementation approach and design choices
 argument-hint: '[--wait|--background] [--base <ref>] [--scope auto|working-tree|branch] [focus ...]'
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(node:*), Bash(git:*), AskUserQuestion
 ---
 
-Run an adversarial Codex review through the shared plugin runtime.
+Run an adversarial Gemini review through the shared plugin runtime.
 Position it as a challenge review that questions the chosen implementation, design choices, tradeoffs, and assumptions.
 It is not just a stricter pass over implementation defects.
 
@@ -15,7 +15,7 @@ Raw slash-command arguments:
 Core constraint:
 - This command is review-only.
 - Do not fix issues, apply patches, or suggest that you are about to make changes.
-- Your only job is to run the review and return Codex's output verbatim to the user.
+- Your only job is to run the review and return Gemini's output verbatim to the user.
 - Keep the framing focused on whether the current approach is the right one, what assumptions it depends on, and where the design could fail under real-world conditions.
 
 Execution mode rules:
@@ -39,15 +39,15 @@ Argument handling:
 - Do not strip `--wait` or `--background` yourself.
 - Do not weaken the adversarial framing or rewrite the user's focus text.
 - The companion script parses `--wait` and `--background`, but Claude Code's `Bash(..., run_in_background: true)` is what actually detaches the run.
-- `/codex:adversarial-review` uses the same review target selection as `/codex:review`.
+- `/gemini:adversarial-review` uses the same review target selection as `/gemini:review`.
 - It supports working-tree review, branch review, and `--base <ref>`.
 - It does not support `--scope staged` or `--scope unstaged`.
-- Unlike `/codex:review`, it can still take extra focus text after the flags.
+- Unlike `/gemini:review`, it can still take extra focus text after the flags.
 
 Foreground flow:
 - Run:
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" adversarial-review "$ARGUMENTS"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review "$ARGUMENTS"
 ```
 - Return the command stdout verbatim, exactly as-is.
 - Do not paraphrase, summarize, or add commentary before or after it.
@@ -57,10 +57,10 @@ Background flow:
 - Launch the review with `Bash` in the background:
 ```typescript
 Bash({
-  command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" adversarial-review "$ARGUMENTS"`,
-  description: "Codex adversarial review",
+  command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" adversarial-review "$ARGUMENTS"`,
+  description: "Gemini adversarial review",
   run_in_background: true
 })
 ```
 - Do not call `BashOutput` or wait for completion in this turn.
-- After launching the command, tell the user: "Codex adversarial review started in the background. Check `/codex:status` for progress."
+- After launching the command, tell the user: "Gemini adversarial review started in the background. Check `/gemini:status` for progress."
