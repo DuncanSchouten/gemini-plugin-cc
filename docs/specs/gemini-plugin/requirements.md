@@ -75,7 +75,13 @@ WHEN user specifies `--model <model>`
 THE SYSTEM SHALL pass the model selection to Gemini CLI
 
 WHEN task completes
-THE SYSTEM SHALL store the result for retrieval via `/gemini:result`
+THE SYSTEM SHALL store the result and Gemini session ID for retrieval via `/gemini:result`
+
+WHEN user specifies `--resume` or `--resume-last`
+THE SYSTEM SHALL resume the most recent Gemini session with full conversation context
+
+WHEN user specifies `--fresh`
+THE SYSTEM SHALL start a new Gemini session regardless of existing resumable sessions
 
 ### US-005: Job Status
 **As a** Claude Code user
@@ -267,6 +273,27 @@ THE SYSTEM SHALL pass it through directly to Gemini CLI via `-m`
 
 **Rationale:** Model aliases provide user-friendly shortcuts while allowing direct model specification for advanced users.
 
+### FR-009: Session Resume
+**Priority:** P0
+**Persona:** Users running `/gemini:rescue` with `--resume`
+
+WHEN a task completes successfully
+THE SYSTEM SHALL capture the Gemini session ID from the stream output and persist it in the job record
+
+WHEN user specifies `--resume-last` or `--resume`
+THE SYSTEM SHALL find the latest completed task's session ID and pass `--resume <session-id>` to the Gemini CLI subprocess
+
+WHEN user specifies `--fresh`
+THE SYSTEM SHALL start a new session regardless of existing resumable sessions
+
+WHEN no previous session is found and `--resume-last` is specified
+THE SYSTEM SHALL report an error indicating no resumable session exists
+
+WHEN a resumable session exists and the user has not specified `--resume` or `--fresh`
+THE SYSTEM SHALL (via the rescue command) prompt the user to choose between continuing the existing session or starting fresh
+
+**Rationale:** Gemini CLI automatically saves sessions in `~/.gemini/tmp/<project_hash>/chats/` and supports `--resume <session-id>` to restore full conversation context, enabling multi-turn task workflows.
+
 ### FR-008: Stop Review Gate
 **Priority:** P1
 **Persona:** Users with review gate enabled
@@ -338,16 +365,15 @@ THE SYSTEM SHALL support `--scope auto|working-tree|branch` for controlling revi
 
 ## Constraints
 
-- Each Gemini CLI invocation is stateless; there is no thread or conversation resumption across invocations
 - Gemini CLI has no native review endpoint; all reviews use prompt-based construction
 - Structured output (JSON schema compliance) is enforced via prompt instructions, not a native API parameter
 - The plugin depends on the `gemini` CLI binary being installed and authenticated independently
+- Session resume requires the Gemini CLI session storage at `~/.gemini/tmp/<project_hash>/chats/` to be intact
 
 ## Out of Scope
 
 - AI SDK provider integration (`ai-sdk-provider-gemini-cli-agentic`) -- reserved for potential future migration
 - Direct Gemini API usage (`@google/generative-ai` SDK) -- bypasses CLI agentic capabilities
-- Thread/conversation resumption -- Gemini CLI does not support persistent threads
 - Staged-only or unstaged-only review scoping
 
 ## Success Metrics
@@ -359,4 +385,5 @@ THE SYSTEM SHALL support `--scope auto|working-tree|branch` for controlling revi
 | Review output quality | Structured JSON with findings | Review produces valid schema-compliant output |
 | Background job lifecycle | Complete create/monitor/cancel flow | Run background rescue, check status, retrieve result |
 | Auth detection | Correct for OAuth users | Setup correctly reads `~/.gemini/settings.json` |
+| Session resume | Resume continues prior context | Run task, then --resume-last with follow-up |
 | Stop gate | Blocks on issues, allows clean exits | Enable gate, verify BLOCK/ALLOW behavior |
