@@ -18,7 +18,16 @@ they already have.
 
 ## Install
 
-Run:
+### 1. Add the marketplace and install the plugin
+
+In Claude Code, run these two commands:
+
+```bash
+/plugin marketplace add DuncanSchouten/gemini-plugin-cc
+/plugin install gemini@gemini-plugin-cc
+```
+
+### 2. Run setup
 
 ```bash
 /gemini:setup
@@ -32,11 +41,15 @@ If you prefer to install the Gemini CLI yourself, use:
 npm install -g @google/gemini-cli
 ```
 
+### 3. Authenticate (if needed)
+
 If the Gemini CLI is installed but not authenticated yet, run:
 
 ```bash
 !gemini auth login
 ```
+
+### Verify
 
 After install, you should see:
 
