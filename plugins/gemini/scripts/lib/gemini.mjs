@@ -174,12 +174,34 @@ export function runGeminiProcess(cwd, options = {}) {
     });
 
     // Parse NDJSON from stdout
+    // Real Gemini CLI emits: init (session_id), message (delta chunks), tool_use, result
+    // Messages with delta:true are streamed chunks that need concatenation.
+    // Messages with role:"user" are echoes of the input prompt — skip them.
+    let assistantMessageParts = [];
+
     parseNdjsonStream(child.stdout, (event) => {
       switch (event.type) {
+        case "init":
+          // Real Gemini CLI emits session_id in the init event
+          if (event.session_id) {
+            sessionId = event.session_id;
+          }
+          break;
+
         case "message":
         case "partialMessage":
+          // Skip user message echoes
+          if (event.role === "user") break;
+
           if (event.content) {
-            finalMessage = event.content;
+            if (event.delta) {
+              // Delta mode: accumulate chunks
+              assistantMessageParts.push(event.content);
+              finalMessage = assistantMessageParts.join("");
+            } else {
+              // Non-delta: complete message (fake fixture uses this)
+              finalMessage = event.content;
+            }
             emitProgress(options.onProgress, `Message received.`, "processing");
           }
           break;
@@ -192,6 +214,8 @@ export function runGeminiProcess(cwd, options = {}) {
           if (event.input?.path) {
             touchedFiles.push(event.input.path);
           }
+          // Reset message accumulator — a new assistant turn may follow tool use
+          assistantMessageParts = [];
           break;
         }
 
@@ -203,6 +227,8 @@ export function runGeminiProcess(cwd, options = {}) {
           break;
 
         case "result":
+          // Real Gemini CLI does not include session_id in result,
+          // but handle it for compatibility with test fixtures
           if (event.session_id) {
             sessionId = event.session_id;
           }
@@ -211,6 +237,7 @@ export function runGeminiProcess(cwd, options = {}) {
 
         case "session":
         case "session_start":
+          // Compatibility with test fixture
           if (event.session_id) {
             sessionId = event.session_id;
           }
