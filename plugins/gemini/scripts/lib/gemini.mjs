@@ -117,7 +117,7 @@ function emitProgress(onProgress, message, phase = null) {
 }
 
 function describeToolUse(event) {
-  const name = event.name || event.toolName || "unknown";
+  const name = event.tool_name || event.name || event.toolName || "unknown";
   return { message: `Running tool: ${name}`, phase: "investigating" };
 }
 
@@ -211,13 +211,19 @@ export function runGeminiProcess(cwd, options = {}) {
           const update = describeToolUse(event);
           emitProgress(options.onProgress, update.message, update.phase);
           // Track file paths from tool_use events
-          if (event.input?.path) {
-            touchedFiles.push(event.input.path);
+          // Real CLI uses "parameters", fake fixture uses "input"
+          const toolParams = event.parameters || event.input || {};
+          if (toolParams.path || toolParams.file_path || toolParams.dir_path) {
+            touchedFiles.push(toolParams.path || toolParams.file_path || toolParams.dir_path);
           }
           // Reset message accumulator — a new assistant turn may follow tool use
           assistantMessageParts = [];
           break;
         }
+
+        case "tool_result":
+          // Tool execution result — skip (we only track tool invocations)
+          break;
 
         case "reasoning":
           if (event.summary) {
