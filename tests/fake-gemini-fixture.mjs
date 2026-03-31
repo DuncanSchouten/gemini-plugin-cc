@@ -35,11 +35,14 @@ if (args[0] === "auth" && args[1] === "login") {
   process.exit(0);
 }
 
-// Find the prompt flag
+// Find the prompt: check -p flag first, then read from stdin
 let prompt = "";
 const promptIndex = args.indexOf("-p");
 if (promptIndex >= 0 && args[promptIndex + 1]) {
   prompt = args[promptIndex + 1];
+} else if (!process.stdin.isTTY) {
+  const fs = require("node:fs");
+  prompt = fs.readFileSync(0, "utf8").trim();
 }
 
 // Determine output format

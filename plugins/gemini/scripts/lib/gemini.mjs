@@ -144,7 +144,7 @@ function describeToolUse(event) {
  */
 export function runGeminiProcess(cwd, options = {}) {
   return new Promise((resolve, reject) => {
-    const args = ["-p", options.prompt, "--output-format", "stream-json"];
+    const args = ["--output-format", "stream-json"];
 
     if (options.resumeSessionId) {
       args.push("--resume", options.resumeSessionId);
@@ -165,6 +165,14 @@ export function runGeminiProcess(cwd, options = {}) {
       stdio: ["pipe", "pipe", "pipe"]
     });
 
+    // Pass prompt via stdin to avoid E2BIG on large prompts
+    if (options.prompt) {
+      child.stdin.write(options.prompt);
+      child.stdin.end();
+    } else {
+      child.stdin.end();
+    }
+
     let finalMessage = "";
     let stderr = "";
     let sessionId = null;
@@ -180,7 +188,6 @@ export function runGeminiProcess(cwd, options = {}) {
     // Real Gemini CLI emits: init (session_id), message (delta chunks), tool_use, result
     // Messages with delta:true are streamed chunks that need concatenation.
     // Messages with role:"user" are echoes of the input prompt — skip them.
-    let assistantMessageParts = [];
 
     parseNdjsonStream(child.stdout, (event) => {
       switch (event.type) {
@@ -198,9 +205,8 @@ export function runGeminiProcess(cwd, options = {}) {
 
           if (event.content) {
             if (event.delta) {
-              // Delta mode: accumulate chunks
-              assistantMessageParts.push(event.content);
-              finalMessage = assistantMessageParts.join("");
+              // Delta mode: append directly to avoid O(N^2) join
+              finalMessage += event.content;
             } else {
               // Non-delta: complete message (fake fixture uses this)
               finalMessage = event.content;
@@ -219,8 +225,8 @@ export function runGeminiProcess(cwd, options = {}) {
           if (toolParams.path || toolParams.file_path || toolParams.dir_path) {
             touchedFiles.push(toolParams.path || toolParams.file_path || toolParams.dir_path);
           }
-          // Reset message accumulator — a new assistant turn may follow tool use
-          assistantMessageParts = [];
+          // Reset message — a new assistant turn may follow tool use
+          finalMessage = "";
           break;
         }
 
