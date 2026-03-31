@@ -196,7 +196,7 @@ Examples:
 ### `/gemini:setup`
 
 Checks whether the Gemini CLI is installed and authenticated.
-If the Gemini CLI is missing and npm is available, it can offer to install it for you.
+If the Gemini CLI is missing and npm is available, it will offer to install it for you.
 
 You can also use `/gemini:setup` to manage the optional review gate.
 
