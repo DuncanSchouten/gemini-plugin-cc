@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "plugins", "gemini");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PLUGIN_ROOT = path.join(ROOT, "plugins", "gemini");
 
 function read(relativePath) {
   return fs.readFileSync(path.join(PLUGIN_ROOT, relativePath), "utf8");
@@ -85,6 +86,7 @@ test("continue is not exposed as a user-facing command", () => {
 test("rescue command absorbs continue semantics", () => {
   const rescue = read("commands/rescue.md");
   const agent = read("agents/gemini-rescue.md");
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
   const runtimeSkill = read("skills/gemini-cli-runtime/SKILL.md");
 
   assert.match(rescue, /The final user-visible response must be Gemini's output verbatim/i);
@@ -135,6 +137,20 @@ test("rescue command absorbs continue semantics", () => {
   assert.match(runtimeSkill, /Strip it before calling `task`/i);
   assert.match(runtimeSkill, /Do not inspect the repository, read files, grep, monitor progress, poll status, fetch results, cancel jobs, summarize output, or do any follow-up work of your own/i);
   assert.match(runtimeSkill, /If the Bash call fails or Gemini cannot be invoked, return nothing/i);
+  assert.match(readme, /`gemini:gemini-rescue` subagent/i);
+  assert.match(readme, /if you do not pass `--model`, Gemini CLI uses its default model routing/i);
+  assert.match(readme, /--model pro/);
+  assert.match(readme, /`flash` maps to `gemini-3-flash-preview`/);
+  assert.match(readme, /continue the latest Gemini session/i);
+  assert.match(readme, /### `\/gemini:setup`/);
+  assert.match(readme, /### `\/gemini:review`/);
+  assert.match(readme, /### `\/gemini:adversarial-review`/);
+  assert.match(readme, /uses the same review target selection as `\/gemini:review`/i);
+  assert.match(readme, /--base main challenge whether this was the right caching and retry design/);
+  assert.match(readme, /### `\/gemini:rescue`/);
+  assert.match(readme, /### `\/gemini:status`/);
+  assert.match(readme, /### `\/gemini:result`/);
+  assert.match(readme, /### `\/gemini:cancel`/);
 });
 
 test("result and cancel commands are exposed as deterministic runtime entrypoints", () => {
@@ -175,9 +191,14 @@ test("hooks keep session-end cleanup and stop gating enabled", () => {
 
 test("setup command can offer Gemini install and still points users to gemini auth login", () => {
   const setup = read("commands/setup.md");
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 
   assert.match(setup, /argument-hint:\s*'\[--enable-review-gate\|--disable-review-gate\]'/);
   assert.match(setup, /AskUserQuestion/);
   assert.match(setup, /npm install -g @google\/gemini-cli/);
   assert.match(setup, /gemini-companion\.mjs" setup --json \$ARGUMENTS/);
+  assert.match(readme, /!gemini auth login/);
+  assert.match(readme, /offer to install/i);
+  assert.match(readme, /\/gemini:setup --enable-review-gate/);
+  assert.match(readme, /\/gemini:setup --disable-review-gate/);
 });
