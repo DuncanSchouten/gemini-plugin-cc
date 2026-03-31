@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "gemini",
+      "name": "gemini-cli-helper",
       "description": "Use Gemini from Claude Code to review code or delegate tasks.",
       "version": "1.0.0",
       "author": {

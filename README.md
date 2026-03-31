@@ -24,7 +24,7 @@ In Claude Code, run these two commands:
 
 ```bash
 /plugin marketplace add DuncanSchouten/gemini-plugin-cc
-/plugin install gemini@gemini-plugin-cc
+/plugin install gemini-cli-helper@gemini-plugin-cc
 ```
 
 ### 2. Run setup
