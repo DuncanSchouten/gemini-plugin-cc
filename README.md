@@ -268,3 +268,9 @@ That means:
 - it uses the same local authentication state
 - it uses the same repository checkout and machine-local environment
 - each command spawns a fresh process (no persistent background server)
+
+## Acknowledgments
+
+This plugin is based on the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc) by OpenAI, originally built to integrate OpenAI's Codex CLI into Claude Code. This project adapts that architecture to use Google's [Gemini CLI](https://github.com/google-gemini/gemini-cli) instead, replacing the Codex App Server protocol with direct Gemini subprocess invocation.
+
+The original plugin's design — job lifecycle management, review gate hooks, prompt templating, and the companion script architecture — provided the foundation for this work. Licensed under [Apache 2.0](./LICENSE).
