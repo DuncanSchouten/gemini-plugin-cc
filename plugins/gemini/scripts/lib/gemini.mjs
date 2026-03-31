@@ -49,10 +49,12 @@ export function getGeminiAuthStatus(options = {}) {
   try {
     const raw = fs.readFileSync(settingsPath, "utf8");
     const settings = JSON.parse(raw);
-    if (settings.selectedType) {
+    // selectedType can be at the top level or nested under security.auth
+    const selectedType = settings.selectedType ?? settings.security?.auth?.selectedType ?? null;
+    if (selectedType) {
       return {
         loggedIn: true,
-        detail: `Authenticated via ${settings.selectedType}`
+        detail: `Authenticated via ${selectedType}`
       };
     }
     return {
