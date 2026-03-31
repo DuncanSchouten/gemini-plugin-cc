@@ -6,7 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { getCodexLoginStatus } from "./lib/codex.mjs";
+import { getGeminiAvailability, getGeminiAuthStatus } from "./lib/gemini.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import { getConfig, listJobs } from "./lib/state.mjs";
 import { sortJobsNewestFirst } from "./lib/job-control.mjs";
@@ -57,13 +57,18 @@ function buildStopReviewPrompt(input = {}) {
 }
 
 function buildSetupNote(cwd) {
-  const authStatus = getCodexLoginStatus(cwd);
-  if (authStatus.available && authStatus.loggedIn) {
-    return null;
+  const availability = getGeminiAvailability(cwd);
+  if (!availability.available) {
+    return `Gemini is not set up for the review gate. ${availability.detail}. Run /gemini:setup.`;
   }
 
-  const detail = authStatus.detail ? ` ${authStatus.detail}.` : "";
-  return `Codex is not set up for the review gate.${detail} Run /codex:setup and, if needed, !codex login.`;
+  const authStatus = getGeminiAuthStatus();
+  if (!authStatus.loggedIn) {
+    const detail = authStatus.detail ? ` ${authStatus.detail}.` : "";
+    return `Gemini is not set up for the review gate.${detail} Run /gemini:setup and, if needed, !gemini auth login.`;
+  }
+
+  return null;
 }
 
 function parseStopReviewOutput(rawOutput) {
@@ -72,7 +77,7 @@ function parseStopReviewOutput(rawOutput) {
     return {
       ok: false,
       reason:
-        "The stop-time Codex review task returned no final output. Run /codex:review --wait manually or bypass the gate."
+        "The stop-time Gemini review task returned no final output. Run /gemini:review --wait manually or bypass the gate."
     };
   }
 
@@ -84,19 +89,19 @@ function parseStopReviewOutput(rawOutput) {
     const reason = firstLine.slice("BLOCK:".length).trim() || text;
     return {
       ok: false,
-      reason: `Codex stop-time review found issues that still need fixes before ending the session: ${reason}`
+      reason: `Gemini stop-time review found issues that still need fixes before ending the session: ${reason}`
     };
   }
 
   return {
     ok: false,
     reason:
-      "The stop-time Codex review task returned an unexpected answer. Run /codex:review --wait manually or bypass the gate."
+      "The stop-time Gemini review task returned an unexpected answer. Run /gemini:review --wait manually or bypass the gate."
   };
 }
 
 function runStopReview(cwd, input = {}) {
-  const scriptPath = path.join(SCRIPT_DIR, "codex-companion.mjs");
+  const scriptPath = path.join(SCRIPT_DIR, "gemini-companion.mjs");
   const prompt = buildStopReviewPrompt(input);
   const childEnv = {
     ...process.env,
@@ -113,7 +118,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Codex review task timed out after 15 minutes. Run /codex:review --wait manually or bypass the gate."
+        "The stop-time Gemini review task timed out after 15 minutes. Run /gemini:review --wait manually or bypass the gate."
     };
   }
 
@@ -122,8 +127,8 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason: detail
-        ? `The stop-time Codex review task failed: ${detail}`
-        : "The stop-time Codex review task failed. Run /codex:review --wait manually or bypass the gate."
+        ? `The stop-time Gemini review task failed: ${detail}`
+        : "The stop-time Gemini review task failed. Run /gemini:review --wait manually or bypass the gate."
     };
   }
 
@@ -134,7 +139,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Codex review task returned invalid JSON. Run /codex:review --wait manually or bypass the gate."
+        "The stop-time Gemini review task returned invalid JSON. Run /gemini:review --wait manually or bypass the gate."
     };
   }
 }
@@ -148,7 +153,7 @@ function main() {
   const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot), input));
   const runningJob = jobs.find((job) => job.status === "queued" || job.status === "running");
   const runningTaskNote = runningJob
-    ? `Codex task ${runningJob.id} is still running. Check /codex:status and use /codex:cancel ${runningJob.id} if you want to stop it before ending the session.`
+    ? `Gemini task ${runningJob.id} is still running. Check /gemini:status and use /gemini:cancel ${runningJob.id} if you want to stop it before ending the session.`
     : null;
 
   if (!config.stopReviewGate) {

@@ -987,3 +987,273 @@ test("adversarial review rejects staged-only scope to match review target select
   assert.match(result.stderr, /Unsupported review scope "staged"/i);
   assert.match(result.stderr, /Use one of: auto, working-tree, branch, or pass --base <ref>/i);
 });
+
+// ---------------------------------------------------------------------------
+// Hook tests
+// ---------------------------------------------------------------------------
+
+test("session start hook exports the Gemini session id and plugin data dir for later commands", () => {
+  const repo = makeTempDir();
+  const envFile = path.join(makeTempDir(), "claude-env.sh");
+  fs.writeFileSync(envFile, "", "utf8");
+  const pluginDataDir = makeTempDir();
+
+  const result = run("node", [SESSION_HOOK, "SessionStart"], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      CLAUDE_ENV_FILE: envFile,
+      CLAUDE_PLUGIN_DATA: pluginDataDir
+    },
+    input: JSON.stringify({
+      hook_event_name: "SessionStart",
+      session_id: "sess-current",
+      cwd: repo
+    })
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    fs.readFileSync(envFile, "utf8"),
+    `export GEMINI_COMPANION_SESSION_ID='sess-current'\nexport CLAUDE_PLUGIN_DATA='${pluginDataDir}'\n`
+  );
+});
+
+test("session end cleans up jobs for the ending session", async (t) => {
+  const repo = makeTempDir();
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const stateDir = resolveStateDir(repo);
+  const jobsDir = path.join(stateDir, "jobs");
+  fs.mkdirSync(jobsDir, { recursive: true });
+
+  const completedLog = path.join(jobsDir, "completed.log");
+  const runningLog = path.join(jobsDir, "running.log");
+  const otherSessionLog = path.join(jobsDir, "other.log");
+  const runningJobFile = path.join(jobsDir, "review-running.json");
+  const otherJobFile = path.join(jobsDir, "review-other.json");
+  fs.writeFileSync(completedLog, "completed\n", "utf8");
+  fs.writeFileSync(runningLog, "running\n", "utf8");
+  fs.writeFileSync(otherSessionLog, "other\n", "utf8");
+  fs.writeFileSync(runningJobFile, JSON.stringify({ id: "review-running" }, null, 2), "utf8");
+  fs.writeFileSync(otherJobFile, JSON.stringify({ id: "review-other" }, null, 2), "utf8");
+
+  const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    cwd: repo,
+    detached: true,
+    stdio: "ignore"
+  });
+  sleeper.unref();
+
+  t.after(() => {
+    try {
+      process.kill(-sleeper.pid, "SIGTERM");
+    } catch {
+      try {
+        process.kill(sleeper.pid, "SIGTERM");
+      } catch {
+        // Ignore missing process.
+      }
+    }
+  });
+
+  fs.writeFileSync(
+    path.join(stateDir, "state.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        config: { stopReviewGate: false },
+        jobs: [
+          {
+            id: "review-completed",
+            status: "completed",
+            title: "Gemini Review",
+            sessionId: "sess-current",
+            logFile: completedLog,
+            createdAt: "2026-03-18T15:30:00.000Z",
+            updatedAt: "2026-03-18T15:31:00.000Z"
+          },
+          {
+            id: "review-running",
+            status: "running",
+            title: "Gemini Review",
+            sessionId: "sess-current",
+            pid: sleeper.pid,
+            logFile: runningLog,
+            createdAt: "2026-03-18T15:32:00.000Z",
+            updatedAt: "2026-03-18T15:33:00.000Z"
+          },
+          {
+            id: "review-other",
+            status: "completed",
+            title: "Gemini Review",
+            sessionId: "sess-other",
+            logFile: otherSessionLog,
+            createdAt: "2026-03-18T15:34:00.000Z",
+            updatedAt: "2026-03-18T15:35:00.000Z"
+          }
+        ]
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  const result = run("node", [SESSION_HOOK, "SessionEnd"], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      GEMINI_COMPANION_SESSION_ID: "sess-current"
+    },
+    input: JSON.stringify({
+      hook_event_name: "SessionEnd",
+      session_id: "sess-current",
+      cwd: repo
+    })
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(otherSessionLog), true);
+  assert.equal(fs.existsSync(otherJobFile), true);
+
+  await waitFor(() => {
+    try {
+      process.kill(sleeper.pid, 0);
+      return false;
+    } catch (error) {
+      return error?.code === "ESRCH";
+    }
+  });
+
+  const state = JSON.parse(fs.readFileSync(path.join(stateDir, "state.json"), "utf8"));
+  assert.deepEqual(state.jobs.map((job) => job.id), ["review-other"]);
+});
+
+test("stop hook blocks on findings when the review gate is enabled", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeGemini(binDir);
+  const configDir = path.join(binDir, ".gemini");
+  installFakeGeminiConfig(configDir, { selectedType: "oauth-personal" });
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const setup = run("node", [SCRIPT, "setup", "--enable-review-gate", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+  assert.equal(setup.status, 0, setup.stderr);
+  const setupPayload = JSON.parse(setup.stdout);
+  assert.equal(setupPayload.reviewGateEnabled, true);
+
+  const taskResult = run("node", [SCRIPT, "task", "--write", "fix the issue"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+  assert.equal(taskResult.status, 0, taskResult.stderr);
+
+  const blocked = run("node", [STOP_HOOK], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir }),
+    input: JSON.stringify({
+      cwd: repo,
+      session_id: "sess-stop-review",
+      last_assistant_message: "I completed the refactor and updated the retry logic."
+    })
+  });
+  assert.equal(blocked.status, 0, blocked.stderr);
+  const blockedPayload = JSON.parse(blocked.stdout);
+  assert.equal(blockedPayload.decision, "block");
+  assert.match(blockedPayload.reason, /Gemini stop-time review found issues that still need fixes/i);
+  assert.match(blockedPayload.reason, /Missing empty-state guard/i);
+});
+
+test("stop hook allows the stop when the review gate is enabled and the review is clean", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeGemini(binDir, "adversarial-clean");
+  const configDir = path.join(binDir, ".gemini");
+  installFakeGeminiConfig(configDir, { selectedType: "oauth-personal" });
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const setup = run("node", [SCRIPT, "setup", "--enable-review-gate", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir })
+  });
+  assert.equal(setup.status, 0, setup.stderr);
+
+  const allowed = run("node", [STOP_HOOK], {
+    cwd: repo,
+    env: buildEnv(binDir, { configDir }),
+    input: JSON.stringify({ cwd: repo, session_id: "sess-stop-clean" })
+  });
+
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(allowed.stdout.trim(), "");
+});
+
+test("stop hook logs running tasks without blocking when the review gate is disabled", () => {
+  const repo = makeTempDir();
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const stateDir = resolveStateDir(repo);
+  const jobsDir = path.join(stateDir, "jobs");
+  fs.mkdirSync(jobsDir, { recursive: true });
+
+  const runningLog = path.join(jobsDir, "task-running.log");
+  fs.writeFileSync(runningLog, "running\n", "utf8");
+
+  fs.writeFileSync(
+    path.join(stateDir, "state.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        config: {
+          stopReviewGate: false
+        },
+        jobs: [
+          {
+            id: "task-live",
+            status: "running",
+            title: "Gemini Task",
+            jobClass: "task",
+            sessionId: "sess-current",
+            logFile: runningLog,
+            createdAt: "2026-03-18T15:32:00.000Z",
+            updatedAt: "2026-03-18T15:33:00.000Z"
+          }
+        ]
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  const blocked = run("node", [STOP_HOOK], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      GEMINI_COMPANION_SESSION_ID: "sess-current"
+    },
+    input: JSON.stringify({ cwd: repo })
+  });
+
+  assert.equal(blocked.status, 0, blocked.stderr);
+  assert.equal(blocked.stdout.trim(), "");
+  assert.match(blocked.stderr, /Gemini task task-live is still running/i);
+  assert.match(blocked.stderr, /\/gemini:status/i);
+  assert.match(blocked.stderr, /\/gemini:cancel task-live/i);
+});

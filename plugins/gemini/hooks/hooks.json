@@ -1,5 +1,5 @@
 {
-  "description": "Optional stop-time review gate for Codex Companion.",
+  "description": "Optional stop-time review gate for Gemini Companion.",
   "hooks": {
     "SessionStart": [
       {
